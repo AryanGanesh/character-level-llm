@@ -7,7 +7,7 @@ text="\n".join(dataset[i]["text"]for i in range(5000))
 print(len(text))
 chars=sorted(list(set(text)))
 print(len(chars))
-#print(chars) ptints all the unique characters in the text
+#print(chars) prints all the unique characters in the text
 d = {}
 for i, ch in enumerate(chars):
     d[ch] = i
