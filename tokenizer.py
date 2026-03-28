@@ -1,11 +1,16 @@
 import torch
+import torch.nn as nn
+from torch.nn import functional as F
 from datasets import load_dataset
 
 dataset = load_dataset("roneneldan/TinyStories", split="train")
-print(dataset[0])
+#print(dataset[0])
 text="\n".join(dataset[i]["text"]for i in range(5000))
 print(len(text))
+
 chars=sorted(list(set(text)))
+vocab_size = len(chars)
+
 print(len(chars))
 #print(chars) prints all the unique characters in the text
 d = {}
@@ -27,7 +32,7 @@ def decode(list_of_ints):
 # print(decode(encode("hello world"))) test to check if the encode and decode functions are working correctly
 
 data=torch.tensor(encode(text), dtype=torch.long)
-print(data.shape, data.dtype)
+#print(data.shape, data.dtype)
 #print(data[:100]) prints the first 100 encoded characters as integers in tensor form
 
 n=int(0.9*len(data))
@@ -37,8 +42,8 @@ val_data=data[n:]
 block_size=32 # the number of characters we want to feed into the model at once
 x=train_data[:block_size] # the input to the model will be the first 32 encoded characters
 y=train_data[1:block_size+1] # the target output will be the next 32 encoded characters, which is the input shifted by one character
-print("x:", x)  #prints the first 32 encoded characters as integers in tensor form
-print("y:", y)
+#print("x:", x)  
+#print("y:", y)
 
 batch_size=4 # the number of sequences we want to feed into the model at once
 def get_batch(split):
@@ -49,5 +54,53 @@ def get_batch(split):
     return x, y 
 
 xb, yb=get_batch("train")
-print("xb:", xb) 
-print("yb:", yb)
+#print("xb:", xb) prints a batch of input sequences as integers in tensor form
+#print("yb:", yb)
+
+class BigramLanguageModel(nn.Module):
+
+    def __init__(self, vocab_size):
+        super().__init__()
+        self.token_embedding_table=nn.Embedding(vocab_size, vocab_size) # create an embedding layer that maps each token to a vector of size vocab_size
+    
+    def forward(self, idx, targets=None):
+        logits=self.token_embedding_table(idx) # get the logits for the input indices by passing them through the embedding layer
+        if targets is None:
+            loss=None
+        else:
+            B,T,C=logits.shape 
+            logits=logits.view(B*T,C) # reshape the logits to have shape (B*T, C) for computing the loss
+            targets=targets.view(B*T) 
+            loss=F.cross_entropy(logits, targets) # compute the cross-entropy loss between the logits and targets
+        return logits, loss
+    
+    def generate(self, idx, max_new_tokens):
+        for _ in range(max_new_tokens):
+            logits, loss = self(idx) 
+            logits = logits[:, -1, :] # focus on the last time step's logits
+            probs = F.softmax(logits, dim=-1) 
+            idx_next = torch.multinomial(probs, num_samples=1) 
+            idx = torch.cat((idx, idx_next), dim=1) # append the new token index to the input indices
+        return idx
+    
+model = BigramLanguageModel(vocab_size)
+xb, yb = get_batch('train')
+logits, loss = model(xb, yb)
+#print(loss.item())
+
+idx = torch.zeros((1, 1), dtype=torch.long)
+generated = model.generate(idx, max_new_tokens=200)
+#print(decode(generated[0].tolist()))
+
+# Creating pytorch optimizer and training loop
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+
+batch_size = 32
+for steps in range(10000):
+    xb, yb = get_batch('train')
+    logits, loss = model(xb, yb)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+
+print(loss.item())
