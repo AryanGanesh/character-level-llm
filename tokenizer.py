@@ -3,6 +3,9 @@ import torch.nn as nn
 from torch.nn import functional as F
 from datasets import load_dataset
 
+n_embed=32
+head_size=32
+
 dataset = load_dataset("roneneldan/TinyStories", split="train")
 #print(dataset[0])
 text="\n".join(dataset[i]["text"]for i in range(5000))
@@ -57,14 +60,38 @@ xb, yb=get_batch("train")
 #print("xb:", xb) prints a batch of input sequences as integers in tensor form
 #print("yb:", yb)
 
+class Head(nn.Module):
+    def __init__(self, head_size):
+        super().__init__()
+        self.key = nn.Linear(n_embed, head_size, bias=False)
+        self.query = nn.Linear(n_embed, head_size, bias=False)
+        self.value = nn.Linear(n_embed, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+    
+    def forward(self, x):
+        B,T,C = x.shape
+        k = self.key(x)  
+        q = self.query(x) 
+        wei=q @ k.transpose(-2, -1) * head_size**-0.5
+        wei=wei.masked_fill(self.tril[:T, :T]==0, float('-inf')) #mask to ensure model only attends to previous tokens
+        wei = F.softmax(wei, dim=-1)
+        v = self.value(x)
+        out = wei @ v
+        return out
+
 class BigramLanguageModel(nn.Module):
 
     def __init__(self, vocab_size):
         super().__init__()
-        self.token_embedding_table=nn.Embedding(vocab_size, vocab_size) # create an embedding layer that maps each token to a vector of size vocab_size
+        self.token_embedding_table=nn.Embedding(vocab_size,n_embed)
+        self.sa_head=Head(head_size) 
+        self.lm_head=nn.Linear(n_embed, vocab_size) # create a linear layer for the language model head
     
     def forward(self, idx, targets=None):
-        logits=self.token_embedding_table(idx) # get the logits for the input indices by passing them through the embedding layer
+        x=self.token_embedding_table(idx) 
+        x=self.sa_head(x)
+        logits=self.lm_head(x)
+
         if targets is None:
             loss=None
         else:
@@ -76,7 +103,8 @@ class BigramLanguageModel(nn.Module):
     
     def generate(self, idx, max_new_tokens):
         for _ in range(max_new_tokens):
-            logits, loss = self(idx) 
+            idx_cond = idx[:, -block_size:]
+            logits, loss = self(idx_cond) 
             logits = logits[:, -1, :] # focus on the last time step's logits
             probs = F.softmax(logits, dim=-1) 
             idx_next = torch.multinomial(probs, num_samples=1) 
@@ -103,4 +131,9 @@ for steps in range(10000):
     loss.backward()
     optimizer.step()
 
-print(loss.item())
+print("loss=", loss.item())
+
+print(decode(model.generate(idx, max_new_tokens=200)[0].tolist()))
+
+
+    
