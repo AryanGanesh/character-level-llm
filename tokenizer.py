@@ -42,8 +42,8 @@ n=int(0.9*len(data))
 train_data=data[:n] # split the data into training and validation sets
 val_data=data[n:]
 
-block_size=32 # the number of characters we want to feed into the model at once
-x=train_data[:block_size] # the input to the model will be the first 32 encoded characters
+block_size=32                # the number of characters we want to feed into the model at once
+x=train_data[:block_size] 
 y=train_data[1:block_size+1] # the target output will be the next 32 encoded characters, which is the input shifted by one character
 #print("x:", x)  
 #print("y:", y)
@@ -52,7 +52,7 @@ batch_size=4 # the number of sequences we want to feed into the model at once
 def get_batch(split):
     data=train_data if split=="train" else val_data
     ix=torch.randint(len(data)-block_size, (batch_size,)) # randomly select batch_size starting indices for the sequences
-    x=torch.stack([data[i:i+block_size] for i in ix])     # create a batch of input sequences by slicing the data at the selected indices
+    x=torch.stack([data[i:i+block_size] for i in ix])    
     y=torch.stack([data[i+1:i+block_size+1] for i in ix]) # create a batch of target sequences ,shifted by one character
     return x, y 
 
@@ -63,6 +63,7 @@ xb, yb=get_batch("train")
 class Head(nn.Module):
     def __init__(self, head_size):
         super().__init__()
+        self.head_size = head_size
         self.key = nn.Linear(n_embed, head_size, bias=False)
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
@@ -72,19 +73,31 @@ class Head(nn.Module):
         B,T,C = x.shape
         k = self.key(x)  
         q = self.query(x) 
-        wei=q @ k.transpose(-2, -1) * head_size**-0.5
+        wei=q @ k.transpose(-2, -1) * self.head_size**-0.5       # compute the attention weights by taking the dot product of the query and key, and scaling by the square root of the head size
         wei=wei.masked_fill(self.tril[:T, :T]==0, float('-inf')) #mask to ensure model only attends to previous tokens
         wei = F.softmax(wei, dim=-1)
         v = self.value(x)
         out = wei @ v
         return out
 
+class MultiHeadAttention(nn.Module):
+    def __init__(self, num_heads, head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        self.proj = nn.Linear(num_heads * head_size, n_embed)
+
+    def forward(self, x):
+        out = torch.cat([h(x) for h in self.heads], dim=-1)
+        out = self.proj(out)
+        return out    
+    
+
 class BigramLanguageModel(nn.Module):
 
     def __init__(self, vocab_size):
         super().__init__()
         self.token_embedding_table=nn.Embedding(vocab_size,n_embed)
-        self.sa_head=Head(head_size) 
+        self.sa_head=MultiHeadAttention(4, n_embed//4)  
         self.lm_head=nn.Linear(n_embed, vocab_size) # create a linear layer for the language model head
     
     def forward(self, idx, targets=None):
@@ -105,7 +118,7 @@ class BigramLanguageModel(nn.Module):
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -block_size:]
             logits, loss = self(idx_cond) 
-            logits = logits[:, -1, :] # focus on the last time step's logits
+            logits = logits[:, -1, :] 
             probs = F.softmax(logits, dim=-1) 
             idx_next = torch.multinomial(probs, num_samples=1) 
             idx = torch.cat((idx, idx_next), dim=1) # append the new token index to the input indices
@@ -134,6 +147,3 @@ for steps in range(10000):
 print("loss=", loss.item())
 
 print(decode(model.generate(idx, max_new_tokens=200)[0].tolist()))
-
-
-    
