@@ -91,6 +91,18 @@ class MultiHeadAttention(nn.Module):
         out = self.proj(out)
         return out    
     
+class FeedForward(nn.Module):
+    def __init__(self, n_embed):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_embed, 4 * n_embed),
+            nn.ReLU(),
+            nn.Linear(4 * n_embed, n_embed),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+    
 
 class BigramLanguageModel(nn.Module):
 
@@ -98,11 +110,13 @@ class BigramLanguageModel(nn.Module):
         super().__init__()
         self.token_embedding_table=nn.Embedding(vocab_size,n_embed)
         self.sa_head=MultiHeadAttention(4, n_embed//4)  
+        self.ffwd=FeedForward(n_embed)
         self.lm_head=nn.Linear(n_embed, vocab_size) # create a linear layer for the language model head
     
     def forward(self, idx, targets=None):
         x=self.token_embedding_table(idx) 
         x=self.sa_head(x)
+        x=self.ffwd(x)
         logits=self.lm_head(x)
 
         if targets is None:
