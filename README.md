@@ -15,140 +15,48 @@ Long-term target: fine-tune this into a small, fully local personal assistant th
 
 ---
 
-## Full Model Pipeline
+## Full Pipeline
 
 ```mermaid
 graph TD
-    A[Raw Text - TinyStories] --> B[Tokenizer]
-    B --> C[Token Integers]
-    C --> D[Embedding Table]
-    D --> E[Transformer Block 1]
-    E --> F[Transformer Block 2]
-    F --> G[Transformer Block 3]
-    G --> H[LM Head]
-    H --> I[Logits]
-    I -->|Training| J[Cross-Entropy Loss]
-    I -->|Generation| K[Softmax + Sample]
-    K --> L[Generated Text]
+    A["📄 Raw Text\nTinyStories"] --> B["🔤 Tokenizer\nchar → integer\nencode / decode"]
+    B --> C["🔢 Token Integers\n[79, 23, 45, 12, ...]"]
+    C --> D["📦 get_batch\nrandom chunks → x and y\nshifted by 1 position"]
+    D --> E["🗂️ Embedding Table\ntoken integer → 32-dim vector"]
 
-    style A fill:#FFE4B5
-    style B fill:#87CEEB
-    style D fill:#87CEEB
-    style E fill:#90EE90
-    style F fill:#90EE90
-    style G fill:#90EE90
-    style H fill:#87CEEB
-    style J fill:#FFB6C1
-    style L fill:#FFB6C1
-```
-
----
-
-## Transformer Block
-
-```mermaid
-graph TD
-    A[Input x] --> B[Multi-Head Attention]
-    A --> C{ }
-    B --> C
-    C -->|x = attention + x| D[After Residual 1]
-    D --> E[Feed-Forward Network]
-    D --> F{ }
     E --> F
-    F -->|x = ffwd + x| G[Output x]
 
-    style B fill:#90EE90
-    style E fill:#87CEEB
-    style C fill:#FFE4B5
-    style F fill:#FFE4B5
-```
+    subgraph BLOCK ["🟩 Transformer Block × 3"]
+        F["Multi-Head Attention\n4 heads × size 8\nQ @ Kᵀ · scale · mask · softmax · V"] -->|"x = attn(x) + x  residual"| G["Feed-Forward\n32 → 128 → ReLU → 32"]
+        G -->|"x = ffwd(x) + x  residual"| H["Output x"]
+    end
 
----
+    H --> I["LM Head\nLinear → Logits\n[B, T, vocab_size]"]
 
-## Self-Attention (Single Head)
+    I -->|"Training"| J["Cross-Entropy Loss\ncompare logits vs y\n4.90 → 1.55"]
+    J --> K["loss.backward\ngradients through every weight"]
+    K --> L["AdamW optimizer.step\nnudge weights × 10,000"]
+    L -->|"next batch"| D
 
-```mermaid
-graph TD
-    A[Input x] --> B[Query Linear Layer]
-    A --> C[Key Linear Layer]
-    A --> D[Value Linear Layer]
-    B --> E[Q @ Kᵀ = raw scores]
-    C --> E
-    E --> F[Scale by 1 divided by sqrt head_size]
-    F --> G[Apply Causal Mask - block future tokens]
-    G --> H[Softmax = attention weights]
-    H --> I[weights @ V = output]
-    D --> I
+    I -->|"Generation"| M["Softmax → Probabilities"]
+    M --> N["torch.multinomial\nsample 1 token"]
+    N -->|"append → loop"| O["📝 Generated Text\nOnce upon a time..."]
 
-    style B fill:#87CEEB
-    style C fill:#87CEEB
-    style D fill:#87CEEB
-    style G fill:#FFB6C1
-    style H fill:#90EE90
-    style I fill:#FFE4B5
-```
-
----
-
-## Multi-Head Attention
-
-```mermaid
-graph TD
-    A[Input x - B T 32] --> B[Head 1 - size 8]
-    A --> C[Head 2 - size 8]
-    A --> D[Head 3 - size 8]
-    A --> E[Head 4 - size 8]
-    B --> F[Concatenate all heads - B T 32]
-    C --> F
-    D --> F
-    E --> F
-    F --> G[Projection Linear 32 to 32]
-    G --> H[Output - B T 32]
-
-    style B fill:#90EE90
-    style C fill:#90EE90
-    style D fill:#90EE90
-    style E fill:#90EE90
-    style F fill:#FFE4B5
-    style G fill:#87CEEB
-```
-
----
-
-## Feed-Forward Network
-
-```mermaid
-graph TD
-    A[Input - n_embd 32] --> B[Linear 32 to 128 - expand 4x]
-    B --> C[ReLU - negatives become zero]
-    C --> D[Linear 128 to 32 - compress back]
-    D --> E[Output - n_embd 32]
-
-    style B fill:#87CEEB
-    style C fill:#FFB6C1
-    style D fill:#87CEEB
-```
-
----
-
-## Training Loop
-
-```mermaid
-graph TD
-    A[Start Training] --> B[get_batch - random chunk of text]
-    B --> C[Forward Pass through model]
-    C --> D[Calculate Loss - how wrong is it?]
-    D --> E[loss.backward - compute gradients]
-    E --> F[optimizer.step - update weights]
-    F --> G{10000 steps done?}
-    G -->|No| B
-    G -->|Yes| H[Generate Text]
-
-    style A fill:#90EE90
-    style D fill:#FFB6C1
-    style E fill:#87CEEB
-    style F fill:#FFE4B5
-    style H fill:#90EE90
+    style A fill:#FFE4B5,color:#000
+    style B fill:#87CEEB,color:#000
+    style C fill:#87CEEB,color:#000
+    style D fill:#87CEEB,color:#000
+    style E fill:#87CEEB,color:#000
+    style F fill:#90EE90,color:#000
+    style G fill:#87CEEB,color:#000
+    style H fill:#90EE90,color:#000
+    style I fill:#87CEEB,color:#000
+    style J fill:#FFB6C1,color:#000
+    style K fill:#FFB6C1,color:#000
+    style L fill:#FFE4B5,color:#000
+    style M fill:#90EE90,color:#000
+    style N fill:#90EE90,color:#000
+    style O fill:#FFB6C1,color:#000
 ```
 
 ---
@@ -195,9 +103,10 @@ Once upon a time there was a fary a ine, Lily.
 ## Project Structure
 
 ```
-llm-from-scratch/
+character-level-llm/
 ├── .venv/           virtual environment
 ├── tokenizer.py     main model file
+├── requirements.txt
 └── README.md
 ```
 
@@ -222,8 +131,8 @@ llm-from-scratch/
 ## Setup
 
 ```powershell
-git clone https://github.com/AryanGanesh/llm-from-scratch
-cd llm-from-scratch
+git clone https://github.com/AryanGanesh/character-level-llm
+cd character-level-llm
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install torch datasets
@@ -251,7 +160,7 @@ python tokenizer.py
 - [ ] Layer Normalisation
 - [ ] Positional Embeddings
 - [ ] Scale up hyperparameters
-
+      
 ---
 
 ## Reference
