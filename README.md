@@ -1,173 +1,156 @@
-# LLM From Scratch
+LLM From Scratch
 
-> Building a character-level Transformer Language Model from zero, in Python and PyTorch.  
-> No APIs. No shortcuts. Every component written and understood from the ground up.
+Building a character-level Transformer Language Model from zero, in Python and PyTorch.
+No APIs. No shortcuts. Every component written and understood from the ground up.
 
----
+What Is This?
 
-## What Is This?
+This is a student project that builds a working Language Model from scratch, following Andrej Karpathy’s “Let’s Build GPT” as a learning backbone.
 
-This is a student project that builds a working Language Model from scratch, following Andrej Karpathy's "Let's Build GPT" as a learning backbone.
+The goal is not just to run a model — but to understand every component:
 
-The goal is not just to run a model — but to understand every single component: how text becomes numbers, how attention works, how the model learns, and how it generates new text.
+how text becomes numbers
+how attention works
+how training actually updates weights
+how generation emerges from probabilities
 
-Long-term target: fine-tune this into a small, fully local personal assistant that runs entirely on-device. No data leaves the machine.
+Long-term goal: a small, fully local personal assistant that runs entirely on-device.
 
----
+Full Pipeline (Updated)
 
-## Full Pipeline
-
-```mermaid
 graph TD
-    A["📄 Raw Text\nTinyStories"] --> B["🔤 Tokenizer\nchar → integer\nencode / decode"]
-    B --> C["🔢 Token Integers\n[79, 23, 45, 12, ...]"]
-    C --> D["📦 get_batch\nrandom chunks → x and y\nshifted by 1 position"]
-    D --> E["🗂️ Embedding Table\ntoken integer → 32-dim vector"]
+    A["📄 Raw Text\nTinyStories"] --> B["🔤 Tokenizer\nchar → integer"]
+    B --> C["🔢 Token Integers\n[79, 23, 45, ...]"]
+    C --> D["📦 get_batch\nrandom chunks"]
+    D --> E["🗂️ Embedding Table\ntoken → 32-dim vector"]
 
-    E --> F
+    E --> BLOCK
 
-    subgraph BLOCK ["🟩 Transformer Block × 3"]
-        F["Multi-Head Attention\n4 heads × size 8\nQ @ Kᵀ · scale · mask · softmax · V"] -->|"x = attn(x) + x  residual"| G["Feed-Forward\n32 → 128 → ReLU → 32"]
-        G -->|"x = ffwd(x) + x  residual"| H["Output x"]
+    subgraph BLOCK ["🟩 Transformer Block × 3 (Pre-Norm)"]
+        direction TB
+
+        LN1["LayerNorm 1"] --> MHA["Multi-Head Attention\n4 heads × size 8"]
+        MHA --> DO1["Dropout"]
+        DO1 -->|"Residual"| R1["x = attn(x) + x"]
+
+        R1 --> LN2["LayerNorm 2"]
+        LN2 --> FF["Feed-Forward\n32 → 128 → ReLU → 32"]
+        FF --> DO2["Dropout"]
+        DO2 -->|"Residual"| R2["x = ffwd(x) + x"]
     end
 
-    H --> I["LM Head\nLinear → Logits\n[B, T, vocab_size]"]
+    R2 --> LNF["Final LayerNorm"]
+    LNF --> I["LM Head\nLinear → Logits"]
 
-    I -->|"Training"| J["Cross-Entropy Loss\ncompare logits vs y\n4.90 → 1.55"]
-    J --> K["loss.backward\ngradients through every weight"]
-    K --> L["AdamW optimizer.step\nnudge weights × 10,000"]
-    L -->|"next batch"| D
+    I -->|"Training"| J["Cross-Entropy Loss\n~1.6–1.8"]
+    J --> K["Backpropagation"]
+    K --> L["AdamW Optimizer\n10,000 steps"]
+    L --> D
 
-    I -->|"Generation"| M["Softmax → Probabilities"]
-    M --> N["torch.multinomial\nsample 1 token"]
-    N -->|"append → loop"| O["📝 Generated Text\nOnce upon a time..."]
+    I -->|"Generation"| M["Softmax → Sample"]
+    M --> O["📝 Generated Text"]
 
-    style A fill:#FFE4B5,color:#000
-    style B fill:#87CEEB,color:#000
-    style C fill:#87CEEB,color:#000
-    style D fill:#87CEEB,color:#000
-    style E fill:#87CEEB,color:#000
-    style F fill:#90EE90,color:#000
-    style G fill:#87CEEB,color:#000
-    style H fill:#90EE90,color:#000
-    style I fill:#87CEEB,color:#000
-    style J fill:#FFB6C1,color:#000
-    style K fill:#FFB6C1,color:#000
-    style L fill:#FFE4B5,color:#000
-    style M fill:#90EE90,color:#000
-    style N fill:#90EE90,color:#000
-    style O fill:#FFB6C1,color:#000
-```
+    style LN1 fill:#f9f,stroke:#333
+    style LN2 fill:#f9f,stroke:#333
+    style LNF fill:#f9f,stroke:#333
+    style DO1 fill:#fab,stroke:#333
+    style DO2 fill:#fab,stroke:#333
+    style BLOCK fill:#f0f0f0,stroke:#333,stroke-dasharray: 5 5
 
----
+This version reflects your Pre-Norm Transformer, with LayerNorm + Dropout fully integrated.
 
-## Loss Progress
+Loss Progress
+Stage	What Was Added	Loss
+Start	Random initialization	~4.90
+Chapter 5	Training loop + AdamW	~2.30
+Chapter 6–8	Attention + FFN	~2.05
+Chapter 9	3× Blocks + Residuals	~1.55
+Chapter 10	Layer Normalization	~1.52
+Chapter 11	Dropout (regularization)	~1.64 – 1.80
 
-| Stage | What Was Added | Loss |
-|---|---|---|
-| Start | Random weights, no training | ~4.90 |
-| Chapter 3 | Bigram model baseline | ~4.90 |
-| Chapter 5 | Training loop + optimizer | ~2.30 |
-| Chapter 6 | Single-head self-attention | ~2.25 |
-| Chapter 7 | Multi-head attention (4 heads) | ~2.21 |
-| Chapter 8 | Feed-forward layer | ~2.05 |
-| Chapter 9 | 3× Transformer blocks + residuals | ~1.55 |
+Note: Slight loss increase after dropout is expected — generalization improves.
 
----
+Generated Output Progress
 
-## Generated Output Progress
+Before training — noise
 
-**Before training — pure noise:**
-```
 !pdL.6œXw¡Vx!!BE4E«V-©;0Fœq!R g T˜Fu
-```
 
-**After training, no attention:**
-```
+After training (no attention)
+
 pasthupppean a wassiliemmar pog fay wis stond
-```
 
-**After multi-head attention:**
-```
-Onerday's d. tifubupon th cary upedel Whs al
-```
+After attention + blocks
 
-**After 3× Transformer blocks:**
-```
 Once upon a time there was a fary a ine, Lily.
 "What'lll strainghid.
-```
-
----
-
-## Project Structure
-
-```
+Project Structure
 character-level-llm/
-├── .venv/           virtual environment
-├── tokenizer.py     main model file
+├── .venv/
+├── tokenizer.py
 ├── requirements.txt
 └── README.md
-```
+Stack
+Tool	Purpose
+Python 3.12	Core language
+PyTorch	Neural network engine
+Hugging Face Datasets	Dataset loading
+Dataset
 
----
+TinyStories — a dataset of ~2M short English stories designed for small language models.
 
-## Stack
-
-| Tool | Purpose |
-|---|---|
-| Python 3.12 | Language |
-| PyTorch | Neural network engine |
-| Hugging Face Datasets | TinyStories dataset |
-
----
-
-## Dataset
-
-**[TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories)** — 2.1 million simple English children's stories. Clean, small vocabulary, perfect for small models. Runs fully locally.
-
----
-
-## Setup
-
-```powershell
+Clean vocabulary
+Short sequences
+Ideal for fast iteration
+Setup
 git clone https://github.com/AryanGanesh/character-level-llm
 cd character-level-llm
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install torch datasets
 python tokenizer.py
-```
+Current Hyperparameters
+Parameter	Value
+n_embd	32
+block_size	32
+batch_size	32
+num_heads	4
+num_blocks	3
+dropout	0.1
+learning rate	1e-3
+training steps	10,000
+architecture	Pre-Norm Transformer
+Architecture Notes
+Pre-Norm design → LayerNorm applied before attention and FFN
+Residual connections → stable gradient flow
+Dropout (0.1) → prevents memorization
+Final LayerNorm → stabilizes logits before prediction
 
----
+This matches modern Transformer implementations used in production models.
 
-## Current Hyperparameters
+What's Left to Build
+ Layer Normalization
+ Dropout
+ Positional Embeddings
+ Scale up (n_embd = 384, n_layer = 6) on GPU
+Key Insight (Current Stage)
 
-| Parameter | Value |
-|---|---|
-| n_embd | 32 |
-| block_size | 32 |
-| batch_size | 32 |
-| num_heads | 4 |
-| num_blocks | 3 |
-| learning rate | 1e-3 |
-| training steps | 10,000 |
+Your model is now:
 
----
+✅ Deep (3 Transformer blocks)
+✅ Stable (LayerNorm + residuals)
+✅ Regularized (Dropout)
+❗ Still position-blind
 
-## What's Left to Build
+Which leads directly to the next milestone:
 
-- [ ] Layer Normalisation
-- [ ] Positional Embeddings
-- [ ] Scale up hyperparameters
-      
----
+👉 Positional Embeddings (Chapter 12)
 
-## Reference
+Reference
 
-Based on [Andrej Karpathy's "Let's Build GPT"](https://www.youtube.com/watch?v=kCc8FmEb1nY)
+Based on:
+Andrej Karpathy — Let’s Build GPT
 
----
+Author
 
-## Author
 AryanGanesh
