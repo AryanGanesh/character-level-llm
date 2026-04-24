@@ -172,5 +172,4 @@ Based on [Andrej Karpathy's "Let's Build GPT"](https://www.youtube.com/watch?v=k
 ---
 
 ## Author
-
-Built session by session as a student project — intermediate Python to full Transformer from scratch.
+AryanGanesh Kavuri
