@@ -59,7 +59,7 @@ def get_batch(split):
 xb, yb=get_batch("train")
 #print("xb:", xb) prints a batch of input sequences as integers in tensor form
 #print("yb:", yb)
-
+print("starting training loop...may take a while...")
 class Head(nn.Module):
     def __init__(self, head_size):
         super().__init__()
@@ -68,6 +68,7 @@ class Head(nn.Module):
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.dropout = nn.Dropout(0.1)
     
     def forward(self, x):
         B,T,C = x.shape
@@ -77,6 +78,7 @@ class Head(nn.Module):
         wei=wei.masked_fill(self.tril[:T, :T]==0, float('-inf')) #mask to ensure model only attends to previous tokens
         wei = F.softmax(wei, dim=-1)
         v = self.value(x)
+        wei = self.dropout(wei)
         out = wei @ v
         return out
 
@@ -85,10 +87,12 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
         self.proj = nn.Linear(num_heads * head_size, n_embed)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1)
         out = self.proj(out)
+        out = self.dropout(out)
         return out    
     
 class FeedForward(nn.Module):
@@ -163,6 +167,8 @@ generated = model.generate(idx, max_new_tokens=200)
 
 # Creating pytorch optimizer and training loop
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+
+print("huge for-loop here, my cpu may explode...just kidding, it should be fine :).... hopefully")
 
 batch_size = 32
 for steps in range(10000):
