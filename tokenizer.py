@@ -109,10 +109,12 @@ class Block(nn.Module):
         super().__init__()
         self.sa_head = MultiHeadAttention(num_heads, n_embed // num_heads)
         self.ffwd = FeedForward(n_embed)
+        self.l1=nn.LayerNorm(n_embed)
+        self.l2=nn.LayerNorm(n_embed)
 
     def forward(self, x):
-        x = self.sa_head(x) + x  # add the input to the output of the attention head (residual connection)
-        x = self.ffwd(x) + x      # add the input to the output of the feedforward network (residual connection)
+        x = self.sa_head(self.l1(x)) + x  # add the input to the output of the attention head (residual connection)
+        x = self.ffwd(self.l2(x)) + x      # add the input to the output of the feedforward network (residual connection)
         return x
     
 class BigramLanguageModel(nn.Module):
@@ -122,11 +124,13 @@ class BigramLanguageModel(nn.Module):
         self.token_embedding_table=nn.Embedding(vocab_size,n_embed)
         self.blocks = nn.Sequential(Block(n_embed, num_heads=4), Block(n_embed, num_heads=4), Block(n_embed, num_heads=4))
         #self.ffwd=FeedForward(n_embed)
+        self.ln_f = nn.LayerNorm(n_embed)
         self.lm_head=nn.Linear(n_embed, vocab_size) # create a linear layer for the language model head
     
     def forward(self, idx, targets=None):
         x=self.token_embedding_table(idx) 
         x = self.blocks(x)
+        x = self.ln_f(x)
         logits=self.lm_head(x)
 
         if targets is None:
