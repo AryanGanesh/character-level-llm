@@ -1,13 +1,13 @@
 #  LLM From Scratch
 
-> Building a character-level Transformer Language Model from zero, in Python and PyTorch.  
+> Building a character-level Transformer Language Model from zero, in Python and PyTorch.
 > No APIs. No shortcuts. Every component written and understood from the ground up.
 
 ---
 
 ## What Is This?
 
-This is a student project that builds a working Language Model from scratch, following Andrej Karpathy's "Let's Build GPT" as a learning backbone.
+A student project that builds a working Language Model from scratch, following Andrej Karpathy's "Let's Build GPT" as a learning backbone.
 
 The goal is not just to run a model — but to understand every single component: how text becomes numbers, how attention works, how the model learns, and how it generates new text.
 
@@ -15,50 +15,138 @@ Long-term target: fine-tune this into a small, fully local personal assistant th
 
 ---
 
-## Full Pipeline
+## Full Model Pipeline
 
 ```mermaid
 graph TD
-    A["📄 Raw Text\nTinyStories"] --> B["🔤 Tokenizer\nchar → integer\nencode / decode"]
-    B --> C["🔢 Token Integers\n[79, 23, 45, 12, ...]"]
-    C --> D["📦 get_batch\nrandom chunks → x and y\nshifted by 1 position"]
-    D --> E["🗂️ Embedding Table\ntoken integer → 32-dim vector"]
-
+    A[Raw Text - TinyStories] --> B[Tokenizer]
+    B --> C[Token Integers]
+    C --> D[Token Embedding Table]
+    C --> E[Position Embedding Table]
+    D --> F[Add Together]
     E --> F
+    F --> G[Transformer Block 1]
+    G --> H[Transformer Block 2]
+    H --> I[Transformer Block 3]
+    I --> J[Layer Norm]
+    J --> K[LM Head]
+    K --> L[Logits]
+    L -->|Training| M[Cross-Entropy Loss]
+    L -->|Generation| N[Softmax + Sample]
+    N --> O[Generated Text]
 
-    subgraph BLOCK ["🟩 Transformer Block × 3  —  Pre-Norm architecture"]
-        F["LayerNorm → Multi-Head Attention\n4 heads × size 8\nQ @ Kᵀ · scale · mask · softmax · dropout · V\n+ projection dropout"] -->|"x = attn(ln1(x)) + x  residual"| G["LayerNorm → Feed-Forward\n32 → 128 → ReLU → 32"]
-        G -->|"x = ffwd(ln2(x)) + x  residual"| H["Output x"]
-    end
+    style A fill:#FFE4B5
+    style B fill:#87CEEB
+    style D fill:#87CEEB
+    style E fill:#87CEEB
+    style F fill:#FFE4B5
+    style G fill:#90EE90
+    style H fill:#90EE90
+    style I fill:#90EE90
+    style J fill:#DDA0DD
+    style M fill:#FFB6C1
+    style O fill:#FFB6C1
+```
 
-    H --> I["Final LayerNorm"]
-    I --> J["LM Head\nLinear → Logits\n[B, T, vocab_size]"]
+---
 
-    J -->|"Training"| K["Cross-Entropy Loss\ncompare logits vs y\n4.90 → 1.55"]
-    K --> L["loss.backward\ngradients through every weight"]
-    L --> M["AdamW optimizer.step\nnudge weights × 10,000"]
-    M -->|"next batch"| D
+## Transformer Block
 
-    J -->|"Generation"| N["Softmax → Probabilities"]
-    N --> O["torch.multinomial\nsample 1 token"]
-    O -->|"append → loop"| P["📝 Generated Text\nOnce upon a time..."]
+```mermaid
+graph TD
+    A[Input x] --> B[Layer Norm 1]
+    B --> C[Multi-Head Attention]
+    C --> D[Add Residual]
+    A --> D
+    D --> E[Layer Norm 2]
+    E --> F[Feed-Forward Network]
+    F --> G[Add Residual]
+    D --> G
+    G --> H[Output x]
 
-    style A fill:#FFE4B5,color:#000
-    style B fill:#87CEEB,color:#000
-    style C fill:#87CEEB,color:#000
-    style D fill:#87CEEB,color:#000
-    style E fill:#87CEEB,color:#000
-    style F fill:#90EE90,color:#000
-    style G fill:#87CEEB,color:#000
-    style H fill:#90EE90,color:#000
-    style I fill:#DDA0DD,color:#000
-    style J fill:#87CEEB,color:#000
-    style K fill:#FFB6C1,color:#000
-    style L fill:#FFB6C1,color:#000
-    style M fill:#FFE4B5,color:#000
-    style N fill:#90EE90,color:#000
-    style O fill:#90EE90,color:#000
-    style P fill:#FFB6C1,color:#000
+    style B fill:#DDA0DD
+    style C fill:#90EE90
+    style D fill:#FFE4B5
+    style E fill:#DDA0DD
+    style F fill:#87CEEB
+    style G fill:#FFE4B5
+```
+
+---
+
+## Self-Attention Head
+
+```mermaid
+graph TD
+    A[Input x] --> B[Query Linear]
+    A --> C[Key Linear]
+    A --> D[Value Linear]
+    B --> E[Q times K-transpose]
+    C --> E
+    E --> F[Scale by 1 over sqrt head_size]
+    F --> G[Causal Mask - block future tokens]
+    G --> H[Softmax]
+    H --> I[Dropout]
+    I --> J[Multiply by V]
+    D --> J
+    J --> K[Output]
+
+    style B fill:#87CEEB
+    style C fill:#87CEEB
+    style D fill:#87CEEB
+    style G fill:#FFB6C1
+    style H fill:#90EE90
+    style I fill:#FFE4B5
+```
+
+---
+
+## Multi-Head Attention
+
+```mermaid
+graph TD
+    A[Input x] --> B[Head 1]
+    A --> C[Head 2]
+    A --> D[Head 3]
+    A --> E[Head 4]
+    B --> F[Concatenate]
+    C --> F
+    D --> F
+    E --> F
+    F --> G[Projection Linear]
+    G --> H[Dropout]
+    H --> I[Output]
+
+    style B fill:#90EE90
+    style C fill:#90EE90
+    style D fill:#90EE90
+    style E fill:#90EE90
+    style F fill:#FFE4B5
+    style G fill:#87CEEB
+    style H fill:#FFE4B5
+```
+
+---
+
+## Training Loop
+
+```mermaid
+graph TD
+    A[Start] --> B[get_batch - random chunk]
+    B --> C[Forward Pass]
+    C --> D[Calculate Loss]
+    D --> E[zero_grad]
+    E --> F[loss.backward]
+    F --> G[optimizer.step]
+    G --> H{10000 steps done?}
+    H -->|No| B
+    H -->|Yes| I[Generate Text]
+
+    style A fill:#90EE90
+    style D fill:#FFB6C1
+    style F fill:#87CEEB
+    style G fill:#FFE4B5
+    style I fill:#90EE90
 ```
 
 ---
@@ -68,24 +156,25 @@ graph TD
 | Stage | What Was Added | Loss |
 |---|---|---|
 | Start | Random weights, no training | ~4.90 |
-| Chapter 3 | Bigram model baseline | ~4.90 |
-| Chapter 5 | Training loop + optimizer | ~2.30 |
+| Chapter 3 | Bigram model + training | ~2.30 |
 | Chapter 6 | Single-head self-attention | ~2.25 |
 | Chapter 7 | Multi-head attention (4 heads) | ~2.21 |
 | Chapter 8 | Feed-forward layer | ~2.05 |
 | Chapter 9 | 3× Transformer blocks + residuals | ~1.55 |
-| Chapter 10 | Layer norm + dropout | ~1.55 → more stable |
+| Chapter 10 | Layer normalisation | ~1.52 |
+| Chapter 11 | Dropout | ~1.60–1.80 |
+| Chapter 12 | Positional embeddings | ~1.54 |
 
 ---
 
 ## Generated Output Progress
 
-**Before training — pure noise:**
+**Before training:**
 ```
-!pdL.6œXw¡Vx!!BE4E«V-©;0Fœq!R g T˜Fu
+!pdL.6œXw¡Vx!!BE4E«V-©;0Fœq
 ```
 
-**After training, no attention:**
+**After Bigram + training:**
 ```
 pasthupppean a wassiliemmar pog fay wis stond
 ```
@@ -98,39 +187,39 @@ Onerday's d. tifubupon th cary upedel Whs al
 **After 3× Transformer blocks:**
 ```
 Once upon a time there was a fary a ine, Lily.
-"What'lll strainghid.
+```
+
+**After positional embeddings:**
+```
+One day, supriestled exploking to gets!
+"Whould his reags day walls."
+Tim you. Thad a awant hering yodded said,
+"Timmy, santild youthere eactays was bles."
 ```
 
 ---
 
-## Architecture Details
+## Architecture Built
 
-### Pre-Norm Transformer Block
-Each block applies Layer Normalisation *before* the sub-layer, not after. This is the modern convention (used in GPT-2 onwards) and stabilises training in deeper networks.
-
-```
-x = MultiHeadAttention(LayerNorm(x)) + x
-x = FeedForward(LayerNorm(x)) + x
-```
-
-A final `LayerNorm` is applied after all three blocks before the LM head.
-
-### Dropout
-Dropout (p=0.1) is applied in two places per block:
-- After the softmax attention weights inside each `Head`, before multiplying by Values
-- After the projection layer in `MultiHeadAttention`
-
-This randomly zeroes activations during training, preventing the model from over-relying on any single path and reducing overfitting.
+| Component | Purpose |
+|---|---|
+| Tokenizer | Characters → integers and back |
+| Token Embeddings | Integer → meaningful vector |
+| Positional Embeddings | Position → vector, added to token embedding |
+| Multi-Head Attention | Tokens communicate — 4 heads in parallel |
+| Feed-Forward Network | Each token thinks independently |
+| Residual Connections | Gradient highway through deep network |
+| Layer Normalisation | Keeps values stable through deep layers |
+| Dropout | Prevents memorisation, improves generalisation |
 
 ---
 
 ## Project Structure
 
 ```
-character-level-llm/
+llm-from-scratch/
 ├── .venv/           virtual environment
-├── tokenizer.py     main model file
-├── requirements.txt
+├── tokenizer.py     full model
 └── README.md
 ```
 
@@ -148,15 +237,15 @@ character-level-llm/
 
 ## Dataset
 
-**[TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories)** — 2.1 million simple English children's stories. Clean, small vocabulary, perfect for small models. Runs fully locally.
+**[TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories)** — 2.1 million simple English children's stories. Clean, small vocabulary, perfect for small models. Runs fully locally — no data sent anywhere.
 
 ---
 
 ## Setup
 
 ```powershell
-git clone https://github.com/AryanGanesh/character-level-llm
-cd character-level-llm
+git clone https://github.com/yourusername/llm-from-scratch
+cd llm-from-scratch
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install torch datasets
@@ -180,11 +269,8 @@ python tokenizer.py
 
 ---
 
-## What's Left to Build
+## What's Next
 
-- [x] Layer Normalisation
-- [x] Dropout
-- [ ] Positional Embeddings
 - [ ] Scale up hyperparameters
 - [ ] Full training run on college GPU
 - [ ] Fine-tune into personal assistant
@@ -198,5 +284,4 @@ Based on [Andrej Karpathy's "Let's Build GPT"](https://www.youtube.com/watch?v=k
 ---
 
 ## Author
-
-AryanGanesh Kavuri — built session by session as a student project, intermediate Python to full Transformer from scratch.
+AryanGanesh- built session by session as a student project
