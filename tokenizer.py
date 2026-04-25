@@ -126,13 +126,17 @@ class BigramLanguageModel(nn.Module):
     def __init__(self, vocab_size):
         super().__init__()
         self.token_embedding_table=nn.Embedding(vocab_size,n_embed)
+        self.position_embedding_table=nn.Embedding(block_size,n_embed)
         self.blocks = nn.Sequential(Block(n_embed, num_heads=4), Block(n_embed, num_heads=4), Block(n_embed, num_heads=4))
         #self.ffwd=FeedForward(n_embed)
         self.ln_f = nn.LayerNorm(n_embed)
         self.lm_head=nn.Linear(n_embed, vocab_size) # create a linear layer for the language model head
     
     def forward(self, idx, targets=None):
-        x=self.token_embedding_table(idx) 
+        B, T = idx.shape
+        tok_emb=self.token_embedding_table(idx) 
+        pos_emb = self.position_embedding_table(torch.arange(T))
+        x=tok_emb+pos_emb
         x = self.blocks(x)
         x = self.ln_f(x)
         logits=self.lm_head(x)
