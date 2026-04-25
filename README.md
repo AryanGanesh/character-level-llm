@@ -50,16 +50,18 @@ graph TD
 
 ---
 
-## Transformer Block
+## Inside One Transformer Block
+
+Each block runs twice — once for attention (tokens talk to each other), once for feed-forward (each token thinks independently). Layer norm stabilises values before each step. Residual connections add the original input back after each step so gradients can flow freely.
 
 ```mermaid
 graph TD
     A[Input x] --> B[Layer Norm 1]
-    B --> C[Multi-Head Attention]
+    B --> C[Multi-Head Attention\n4 heads in parallel\nDropout applied]
     C --> D[Add Residual]
     A --> D
     D --> E[Layer Norm 2]
-    E --> F[Feed-Forward Network]
+    E --> F[Feed-Forward Network\nExpand 4x then compress\nReLU non-linearity]
     F --> G[Add Residual]
     D --> G
     G --> H[Output x]
@@ -74,70 +76,16 @@ graph TD
 
 ---
 
-## Self-Attention Head
-
-```mermaid
-graph TD
-    A[Input x] --> B[Query Linear]
-    A --> C[Key Linear]
-    A --> D[Value Linear]
-    B --> E[Q times K-transpose]
-    C --> E
-    E --> F[Scale by 1 over sqrt head_size]
-    F --> G[Causal Mask - block future tokens]
-    G --> H[Softmax]
-    H --> I[Dropout]
-    I --> J[Multiply by V]
-    D --> J
-    J --> K[Output]
-
-    style B fill:#87CEEB
-    style C fill:#87CEEB
-    style D fill:#87CEEB
-    style G fill:#FFB6C1
-    style H fill:#90EE90
-    style I fill:#FFE4B5
-```
-
----
-
-## Multi-Head Attention
-
-```mermaid
-graph TD
-    A[Input x] --> B[Head 1]
-    A --> C[Head 2]
-    A --> D[Head 3]
-    A --> E[Head 4]
-    B --> F[Concatenate]
-    C --> F
-    D --> F
-    E --> F
-    F --> G[Projection Linear]
-    G --> H[Dropout]
-    H --> I[Output]
-
-    style B fill:#90EE90
-    style C fill:#90EE90
-    style D fill:#90EE90
-    style E fill:#90EE90
-    style F fill:#FFE4B5
-    style G fill:#87CEEB
-    style H fill:#FFE4B5
-```
-
----
-
 ## Training Loop
 
 ```mermaid
 graph TD
-    A[Start] --> B[get_batch - random chunk]
-    B --> C[Forward Pass]
-    C --> D[Calculate Loss]
-    D --> E[zero_grad]
-    E --> F[loss.backward]
-    F --> G[optimizer.step]
+    A[Start] --> B[get_batch\nrandom chunk of text]
+    B --> C[Forward Pass\nthrough all blocks]
+    C --> D[Calculate Loss\ncross-entropy]
+    D --> E[zero_grad\nclear old gradients]
+    E --> F[loss.backward\ncompute new gradients]
+    F --> G[optimizer.step\nnudge every weight]
     G --> H{10000 steps done?}
     H -->|No| B
     H -->|Yes| I[Generate Text]
@@ -284,4 +232,4 @@ Based on [Andrej Karpathy's "Let's Build GPT"](https://www.youtube.com/watch?v=k
 ---
 
 ## Author
-AryanGanesh- built session by session as a student project
+AryanGanesh — built session by session as a student project
